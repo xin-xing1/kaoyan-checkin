@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}阶段计划{% endblock %}
+{% block content %}
+    <section class="panel">
+        <h2>新建阶段计划</h2>
+        <form id="planForm" class="form-row">
+            <select id="planGoal" required><option value="">选择目标</option></select>
+            <select id="planStage">
+                <option value="基础">基础</option>
+                <option value="强化">强化</option>
+                <option value="冲刺">冲刺</option>
+            </select>
+            <input type="text" id="planName" placeholder="计划名称" required>
+            <input type="date" id="planStart" required>
+            <input type="date" id="planEnd" required>
+            <button type="submit" class="btn btn-primary">创建计划</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>我的阶段计划</h2>
+        <table class="table">
+            <thead><tr><th>ID</th><th>所属目标</th><th>阶段</th><th>计划名称</th><th>开始日期</th><th>结束日期</th><th>操作</th></tr></thead>
+            <tbody id="planTable"></tbody>
+        </table>
+    </section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadPlans() {
+    const data = await api("/api/plans");
+    const tb = document.getElementById("planTable");
+    tb.innerHTML = (data.data || []).map(x => `
+        <tr>
+            <td>${x["计划ID"]}</td>
+            <td>${x["目标院校"]}·${x["目标专业"]}</td>
+            <td>${x["阶段"]}</td>
+            <td>${x["计划名称"]}</td>
+            <td>${x["开始日期"]}</td><td>${x["结束日期"]}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="delPlan(${x["计划ID"]})">删除</button></td>
+        </tr>`).join("") || '<tr><td colspan="7" class="empty">暂无计划</td></tr>';
+}
+async function delPlan(id) {
+    if (!confirm("确认删除该计划？其下属任务将被级联删除")) return;
+    const data = await api("/api/plans/" + id, "DELETE");
+    if (data.code === 0) loadPlans(); else alert(data.msg);
+}
+document.addEventListener("DOMContentLoaded", async () => {
+    loadPlans();
+    const g = await api("/api/goals");
+    const sel = document.getElementById("planGoal");
+    sel.innerHTML = '<option value="">选择目标</option>' + (g.data || []).map(x =>
+        `<option value="${x["目标ID"]}">${x["目标院校"]}·${x["目标专业"]}</option>`).join("");
+    document.getElementById("planForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = await api("/api/plans", "POST", {
+            goal_id: document.getElementById("planGoal").value,
+            stage: document.getElementById("planStage").value,
+            name: document.getElementById("planName").value,
+            start: document.getElementById("planStart").value,
+            end: document.getElementById("planEnd").value
+        });
+        if (data.code === 0) { e.target.reset(); loadPlans(); } else alert(data.msg);
+    });
+});
+</script>
+{% endblock %}

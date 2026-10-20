@@ -1,0 +1,14 @@
+# 凭据与本地配置（严禁入库）
+myaql密码.txt
+config.local.py
+*.password
+*.secret
+
+# 临时文件与缓存
+*.tmp
+*.log
+__pycache__/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

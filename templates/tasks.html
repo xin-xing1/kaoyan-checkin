@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}任务管理{% endblock %}
+{% block content %}
+    <section class="panel">
+        <h2>新建每日任务</h2>
+        <form id="taskForm" class="form-row">
+            <select id="taskPlan" required><option value="">选择计划</option></select>
+            <input type="text" id="taskName" placeholder="任务名称" required>
+            <input type="text" id="taskSubject" placeholder="科目" required>
+            <input type="number" id="taskDuration" placeholder="预计时长(分钟)" required>
+            <select id="taskPriority">
+                <option value="高">高</option>
+                <option value="中" selected>中</option>
+                <option value="低">低</option>
+            </select>
+            <input type="datetime-local" id="taskDeadline" required>
+            <button type="submit" class="btn btn-primary">添加任务</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>我的任务</h2>
+        <table class="table">
+            <thead><tr><th>ID</th><th>任务名称</th><th>科目</th><th>预计时长</th><th>优先级</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="taskTable"></tbody>
+        </table>
+    </section>
+{% endblock %}
+{% block scripts %}
+<script>
+const PRI = { "高": "tag-high", "中": "tag-mid", "低": "tag-low" };
+const STS = { "已完成": "tag-done", "进行中": "tag-doing", "待执行": "tag-wait", "已逾期": "tag-over" };
+async function loadTasks() {
+    const data = await api("/api/tasks");
+    const tb = document.getElementById("taskTable");
+    tb.innerHTML = (data.data || []).map(x => `
+        <tr>
+            <td>${x["任务ID"]}</td><td>${x["任务名称"]}</td><td>${x["科目"]}</td>
+            <td>${x["预计时长"]}分钟</td>
+            <td><span class="tag ${PRI[x["优先级"]] || ''}">${x["优先级"]}</span></td>
+            <td>${x["截止时间"]}</td>
+            <td><span class="tag ${STS[x["完成状态"]] || ''}">${x["完成状态"]}</span></td>
+            <td>${x["完成状态"] === "已完成" ? "" :
+                `<button class="btn btn-primary btn-sm" onclick="setStatus(${x["任务ID"]},'进行中')">开始</button>
+                 <button class="btn btn-success btn-sm" onclick="setStatus(${x["任务ID"]},'已完成')">完成</button>`}
+            </td>
+        </tr>`).join("") || '<tr><td colspan="8" class="empty">暂无任务</td></tr>';
+}
+async function setStatus(id, status) {
+    const data = await api("/api/tasks/" + id, "PUT", { status });
+    if (data.code === 0) loadTasks(); else alert(data.msg);
+}
+document.addEventListener("DOMContentLoaded", async () => {
+    loadTasks();
+    const p = await api("/api/plans");
+    const sel = document.getElementById("taskPlan");
+    sel.innerHTML = '<option value="">选择计划</option>' + (p.data || []).map(x =>
+        `<option value="${x["计划ID"]}">${x["计划名称"]}（${x["阶段"]}）</option>`).join("");
+    document.getElementById("taskForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = await api("/api/tasks", "POST", {
+            plan_id: document.getElementById("taskPlan").value,
+            name: document.getElementById("taskName").value,
+            subject: document.getElementById("taskSubject").value,
+            duration: document.getElementById("taskDuration").value,
+            priority: document.getElementById("taskPriority").value,
+            deadline: document.getElementById("taskDeadline").value
+        });
+        if (data.code === 0) { e.target.reset(); loadTasks(); } else alert(data.msg);
+    });
+});
+</script>
+{% endblock %}
