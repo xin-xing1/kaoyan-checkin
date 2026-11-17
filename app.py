@@ -2,7 +2,7 @@
 """考研备考监督打卡与激励管理系统 —— Flask 后端"""
 import pymysql
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from config import DB_CONFIG
 app = Flask(__name__)
 app.secret_key = "8f4c2b7e91d6a03f5e8b1c47d92a6f30e5b8c1d47a92f6e30b5c8d1a47e92f6b0"
@@ -106,7 +106,7 @@ def login_api():
     user = cur.fetchone()
     cur.close()
     conn.close()
-    if user and user["密码"] == data["password"]:
+    if user and check_password_hash(user["密码"], data["password"]):
         session["uid"] = user["用户ID"]
         session["nickname"] = user["昵称"]
         return jsonify({"code": 0, "msg": "登录成功", "nickname": user["昵称"]})
