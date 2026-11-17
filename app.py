@@ -1,8 +1,21 @@
 # -*- coding: utf-8 -*-
 """考研备考监督打卡与激励管理系统 —— Flask 后端"""
+import pymysql
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from config import DB_CONFIG
 app = Flask(__name__)
 app.secret_key = "8f4c2b7e91d6a03f5e8b1c47d92a6f30e5b8c1d47a92f6e30b5c8d1a47e92f6b0"
+
+def get_db():
+    return pymysql.connect(
+        host=DB_CONFIG["host"], user=DB_CONFIG["user"],
+        password=DB_CONFIG["password"], database=DB_CONFIG["database"],
+        charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor
+    )
+
+
+# ---------- 页面路由 ----------
+
 
 # ---------- 页面路由 ----------
 @app.route("/")
