@@ -1,0 +1,23 @@
+# 凭据与本地配置（严禁入库）
+myaql密码.txt
+config.local.py
+*.password
+*.secret
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+env/
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 临时文件与日志
+*.tmp
+*.log
