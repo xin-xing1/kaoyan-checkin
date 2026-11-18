@@ -175,6 +175,39 @@ def checkin():
     conn.close()
     return jsonify({"code": 0, "msg": "打卡成功，积分已发放", "checkin_id": cid})
 
+# ---------- /api/supervise [POST] ----------
+@app.route("/api/supervise", methods=["GET", "POST"])
+def supervise():
+    conn = get_db()
+    cur = conn.cursor()
+
+    if request.method == "GET":
+        cur.execute(
+            "SELECT s.`监督ID`, u.`用户ID`, u.`昵称` FROM `Supervise` s JOIN `User` u ON s.`研友ID`=u.`用户ID` WHERE s.`用户ID`=%s AND s.`状态`='有效'",
+            (session["uid"],),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"code": 0, "data": rows})
+
+    data = request.json
+    cur.execute("SELECT `用户ID` FROM `User` WHERE `手机号`=%s", (data["phone"],))
+    peer = cur.fetchone()
+    if not peer:
+        cur.close()
+        conn.close()
+        return jsonify({"code": 1, "msg": "未找到该手机号用户"})
+
+    cur.execute(
+        "INSERT INTO `Supervise`(`用户ID`,`研友ID`,`状态`) VALUES (%s,%s,'有效')",
+        (session["uid"], peer["用户ID"]),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "监督关系已建立"})
+
 # ---------- /api/stats ----------
 @app.route("/api/stats")
 def stats():
@@ -275,6 +308,20 @@ def checkin_history():
     cur.close()
     conn.close()
     return jsonify({"code": 0, "data": rows})
+
+# ---------- /api/supervise/<int:sup_id> [DELETE] ----------
+@app.route("/api/supervise/<int:sup_id>", methods=["DELETE"])
+def delete_supervise(sup_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE `Supervise` SET `状态`='已解除' WHERE `监督ID`=%s AND `用户ID`=%s",
+        (sup_id, session["uid"]),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "监督关系已解除"})
 
 # ---------- STARTUP ----------
 if __name__ == "__main__":

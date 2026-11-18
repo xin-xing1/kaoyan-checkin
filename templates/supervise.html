@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}研友监督{% endblock %}
+{% block content %}
+    <section class="panel">
+        <h2>添加研友监督</h2>
+        <form id="superviseForm" class="form-row">
+            <input type="text" id="peerPhone" placeholder="研友手机号" required>
+            <button type="submit" class="btn btn-primary">建立监督</button>
+        </form>
+        <p class="muted">提示：监督关系建立后，双方每日打卡进度互相可见；每人最多 10 个监督关系（状态：有效 / 已解除）。</p>
+    </section>
+
+    <section class="panel">
+        <h2>我监督的研友</h2>
+        <table class="table">
+            <thead><tr><th>监督ID</th><th>研友昵称</th><th>操作</th></tr></thead>
+            <tbody id="peerTable"></tbody>
+        </table>
+    </section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadPeers() {
+    const data = await api("/api/supervise");
+    const tb = document.getElementById("peerTable");
+    tb.innerHTML = (data.data || []).map(x => `
+        <tr>
+            <td>${x["监督ID"] || '-'}</td>
+            <td>👥 ${x["昵称"]}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="removeSup(${x["监督ID"]})">解除</button></td>
+        </tr>`).join("") || '<tr><td colspan="3" class="empty">暂无监督研友</td></tr>';
+}
+async function removeSup(id) {
+    if (!confirm("确认解除该监督关系？")) return;
+    const data = await api("/api/supervise/" + id, "DELETE");
+    if (data.code === 0) loadPeers(); else alert(data.msg);
+}
+document.addEventListener("DOMContentLoaded", () => {
+    loadPeers();
+    document.getElementById("superviseForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = await api("/api/supervise", "POST", {
+            phone: document.getElementById("peerPhone").value
+        });
+        if (data.code === 0) { e.target.reset(); loadPeers(); } else alert(data.msg);
+    });
+});
+</script>
+{% endblock %}
