@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}考研打卡{% endblock %} · kaoyan_checkin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <span class="brand">📚 考研打卡</span>
+            <a href="/" class="nav-link{{ ' active' if request.path == '/' else '' }}">工作台</a>
+            <a href="/goals" class="nav-link{{ ' active' if request.path == '/goals' else '' }}">目标</a>
+            <a href="/plans" class="nav-link{{ ' active' if request.path == '/plans' else '' }}">计划</a>
+            <a href="/tasks" class="nav-link{{ ' active' if request.path == '/tasks' else '' }}">任务</a>
+            <a href="/checkin" class="nav-link{{ ' active' if request.path == '/checkin' else '' }}">打卡</a>
+            <a href="/supervise" class="nav-link{{ ' active' if request.path == '/supervise' else '' }}">监督</a>
+            <a href="/rewards" class="nav-link{{ ' active' if request.path == '/rewards' else '' }}">勋章排行</a>
+            <span class="nav-user">{{ nickname or '' }}</span>
+            <a href="/api/logout" class="btn btn-link">退出</a>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
