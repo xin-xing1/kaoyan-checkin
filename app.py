@@ -309,6 +309,34 @@ def checkin_history():
     conn.close()
     return jsonify({"code": 0, "data": rows})
 
+# ---------- /api/badges ----------
+@app.route("/api/badges")
+def badges():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM `Badge` WHERE `用户ID`=%s ORDER BY `获得时间` DESC",
+        (session["uid"],),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "data": rows})
+
+# ---------- /api/points ----------
+@app.route("/api/points")
+def points():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM `PointsFlow` WHERE `用户ID`=%s ORDER BY `发生时间` DESC LIMIT 50",
+        (session["uid"],),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "data": rows})
+
 # ---------- /api/supervise/<int:sup_id> [DELETE] ----------
 @app.route("/api/supervise/<int:sup_id>", methods=["DELETE"])
 def delete_supervise(sup_id):

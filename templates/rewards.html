@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}积分勋章排行{% endblock %}
+{% block content %}
+    <section class="panel">
+        <h2>我的积分概览</h2>
+        <div id="rankBox" class="overview"></div>
+    </section>
+
+    <section class="panel">
+        <h2>全站积分排行 TOP10</h2>
+        <ul id="topList" class="rank-list"></ul>
+    </section>
+
+    <section class="panel">
+        <h2>我的勋章墙</h2>
+        <div id="badgeWall" class="badge-wall"></div>
+        <p class="muted">勋章类型：连续打卡7/14/30天、早起学习、任务完成、全勤月（记录不可撤销）。</p>
+    </section>
+
+    <section class="panel">
+        <h2>积分流水</h2>
+        <table class="table">
+            <thead><tr><th>流水ID</th><th>分值</th><th>积分类型</th><th>发生时间</th></tr></thead>
+            <tbody id="pointsTable"></tbody>
+        </table>
+    </section>
+{% endblock %}
+{% block scripts %}
+<script>
+    const uid = {{ session['uid'] }};
+    document.addEventListener("DOMContentLoaded", async () => {
+        const s = await api("/api/stats");
+        document.getElementById("rankBox").innerHTML = `
+            <div class="stat-card"><b>${s.rank ? s.rank["总积分"] : 0}</b>我的总积分</div>
+            <div class="stat-card"><b>${s.rank ? s.rank["积分流水条数"] : 0}</b>流水条数</div>
+            <div class="stat-card"><b>${s.checkin ? s.checkin["打卡次数"] : 0}</b>累计打卡</div>
+            <div class="stat-card"><b>${s.checkin ? s.checkin["打卡天数"] : 0}</b>打卡天数</div>
+            <div class="stat-card"><b>${s.task ? s.task["完成率(%)"] : "-"}</b>任务完成率</div>
+        `;
+        const top = document.getElementById("topList");
+        top.innerHTML = (s.top10 || []).map((r, i) =>
+            `<li class="${r["用户ID"] === uid ? 'me' : ''}"><span>${i + 1}. ${r["昵称"]}</span><span>${r["总积分"]} 分</span></li>`).join("") || '<li class="empty">暂无排行数据</li>';
+
+        const b = await api("/api/badges");
+        document.getElementById("badgeWall").innerHTML = (b.data || []).map(x =>
+            `<div class="badge-card"><div class="icon">🏅</div><div class="name">${x["勋章类型"]}</div><div class="time">${x["获得时间"]}</div></div>`).join("") || '<span class="empty">暂无勋章</span>';
+
+        const p = await api("/api/points");
+        document.getElementById("pointsTable").innerHTML = (p.data || []).map(x => `
+            <tr>
+                <td>${x["流水ID"]}</td>
+                <td><b>${x["分值"] > 0 ? "+" : ""}${x["分值"]}</b></td>
+                <td>${x["积分类型"]}</td><td>${x["发生时间"]}</td>
+            </tr>`).join("") || '<tr><td colspan="4" class="empty">暂无积分流水</td></tr>';
+    });
+</script>
+{% endblock %}
