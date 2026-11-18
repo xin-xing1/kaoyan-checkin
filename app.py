@@ -131,3 +131,28 @@ def logout():
 
 
 # ---------- 目标管理 ----------
+
+
+# ---------- /api/stats ----------
+@app.route("/api/stats")
+def stats():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM `v_user_checkin_stats` WHERE `用户ID`=%s",
+                (session["uid"],))
+    checkin_stats = cur.fetchone()
+    cur.execute("SELECT * FROM `v_points_rank` WHERE `用户ID`=%s",
+                (session["uid"],))
+    rank = cur.fetchone()
+    cur.execute("SELECT * FROM `v_task_completion_stats` WHERE `用户ID`=%s",
+                (session["uid"],))
+    task_stats = cur.fetchone()
+    cur.execute("SELECT * FROM `v_points_rank` ORDER BY `总积分` DESC LIMIT 10")
+    top10 = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "checkin": checkin_stats, "rank": rank,
+                    "task": task_stats, "top10": top10})
+
+
+# ---------- 阶段计划管理 ----------
