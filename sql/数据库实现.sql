@@ -245,3 +245,76 @@ LEFT JOIN `Goal` g  ON u.`用户ID` = g.`用户ID`
 LEFT JOIN `Plan` p  ON g.`目标ID` = p.`目标ID`
 LEFT JOIN `Task` t  ON p.`计划ID` = t.`计划ID`
 GROUP BY u.`用户ID`, u.`昵称`;
+
+
+-- ============================================================================
+-- ⑤ 存储过程（含 DELIMITER 语法）
+-- ============================================================================
+
+-- 5.1 打卡积分自动入账：插入打卡记录 -> 发放积分 -> 更新任务完成状态
+--     对应业务规则：正常打卡 10 分/项、任务提前完成额外 5 分（此处按基础分值 10 发放）
+DELIMITER $$
+CREATE PROCEDURE `sp_checkin_and_award`(
+    IN  p_user_id       INT,          -- 打卡用户ID
+    IN  p_task_id       INT,          -- 打卡任务ID
+    IN  p_complete_time DATETIME,     -- 任务完成时间（精确到秒）
+    IN  p_image_url     VARCHAR(255), -- 图片证明URL，可空
+    OUT p_checkin_id    INT           -- 新生成的打卡ID
+)
+BEGIN
+    -- 任务存在性校验（仅处理已登记任务）
+    IF NOT EXISTS (SELECT 1 FROM `Task` WHERE `任务ID` = p_task_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '任务不存在，无法打卡';
+    END IF;
+
+    -- ① 插入打卡记录
+    INSERT INTO `Checkin` (`任务ID`, `用户ID`, `完成时间`, `图片证明URL`)
+    VALUES (p_task_id, p_user_id, p_complete_time, p_image_url);
+    SET p_checkin_id = LAST_INSERT_ID();
+
+    -- ② 发放积分：正常打卡 10 分/项（对应 R1 规则与 FR-05 积分规则）
+    INSERT INTO `PointsFlow` (`用户ID`, `分值`, `积分类型`, `发生时间`)
+    VALUES (p_user_id, 10, '正常打卡', NOW());
+
+    -- ③ 更新任务完成状态为“已完成”
+    UPDATE `Task` SET `完成状态` = '已完成' WHERE `任务ID` = p_task_id;
+END$$
+DELIMITER ;
+
+-- 5.2 用户学习统计汇总：按时间段输出打卡次数/打卡天数/获得积分，支撑数据统计反馈流程
+DELIMITER $$
+CREATE PROCEDURE `sp_user_checkin_summary`(
+    IN  p_user_id INT, -- 统计用户ID
+    IN  p_begin   DATE, -- 统计开始日期（含）
+    IN  p_end     DATE  -- 统计结束日期（含）
+)
+BEGIN
+    -- ① 打卡概况
+    SELECT
+        COUNT(c.`打卡ID`)                   AS `打卡次数`,
+        COUNT(DISTINCT DATE(c.`打卡时间戳`)) AS `打卡天数`,
+        MAX(c.`打卡时间戳`)                 AS `最近打卡时间`
+    FROM `Checkin` c
+    WHERE c.`用户ID` = p_user_id
+      AND DATE(c.`打卡时间戳`) BETWEEN p_begin AND p_end;
+
+    -- ② 积分汇总（含积分类型明细）
+    SELECT `积分类型`, SUM(`分值`) AS `类型小计`, COUNT(*) AS `流水条数`
+    FROM `PointsFlow`
+    WHERE `用户ID` = p_user_id
+      AND DATE(`发生时间`) BETWEEN p_begin AND p_end
+    GROUP BY `积分类型`;
+END$$
+DELIMITER ;
+
+-- ============================================================================
+-- ⑥ 存储过程调用示例（取消注释即可执行验证）
+-- ============================================================================
+-- CALL sp_checkin_and_award(1, 3, '2026-10-11 20:30:00', 'https://cdn.example.com/checkin/11.jpg', @cid);
+-- SELECT @cid AS 新打卡ID;
+-- CALL sp_user_checkin_summary(1, '2026-10-01', '2026-10-13');
+
+-- 视图查询示例
+-- SELECT * FROM v_user_checkin_stats;
+-- SELECT * FROM v_points_rank;
+-- SELECT * FROM v_task_completion_stats;
