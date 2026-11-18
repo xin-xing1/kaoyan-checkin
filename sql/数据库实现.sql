@@ -202,3 +202,46 @@ INSERT INTO `Badge` (`用户ID`,`勋章类型`,`获得时间`) VALUES
 (1,'早起学习','2026-10-08 06:50:00'),
 (2,'连续打卡7天','2026-10-07 08:00:00'),
 (3,'任务完成','2026-10-08 22:00:00');
+
+
+-- ============================================================================
+-- ④ 视图（功能贴合系统业务）
+-- ============================================================================
+
+-- 4.1 用户打卡统计视图：按用户聚合打卡次数/打卡天数/最近打卡时间，支撑学习数据统计模块
+CREATE OR REPLACE VIEW `v_user_checkin_stats` AS
+SELECT
+    u.`用户ID`,
+    u.`昵称`,
+    COUNT(c.`打卡ID`)                   AS `打卡次数`,
+    COUNT(DISTINCT DATE(c.`打卡时间戳`)) AS `打卡天数`,
+    MAX(c.`打卡时间戳`)                 AS `最近打卡时间`
+FROM `User` u
+LEFT JOIN `Checkin` c ON u.`用户ID` = c.`用户ID`
+GROUP BY u.`用户ID`, u.`昵称`;
+
+-- 4.2 积分排行视图：按用户汇总总积分，支撑个人/小组/全站排行（每日24:00汇总口径）
+CREATE OR REPLACE VIEW `v_points_rank` AS
+SELECT
+    u.`用户ID`,
+    u.`昵称`,
+    COALESCE(SUM(p.`分值`), 0) AS `总积分`,
+    COUNT(p.`流水ID`)          AS `积分流水条数`
+FROM `User` u
+LEFT JOIN `PointsFlow` p ON u.`用户ID` = p.`用户ID`
+GROUP BY u.`用户ID`, u.`昵称`
+ORDER BY `总积分` DESC;
+
+-- 4.3 任务完成统计视图：按用户统计任务总数/已完成数/完成率，支撑任务完成率与逾期率分析
+CREATE OR REPLACE VIEW `v_task_completion_stats` AS
+SELECT
+    u.`用户ID`,
+    u.`昵称`,
+    COUNT(t.`任务ID`) AS `任务总数`,
+    SUM(CASE WHEN t.`完成状态` = '已完成' THEN 1 ELSE 0 END) AS `已完成数`,
+    ROUND(SUM(CASE WHEN t.`完成状态` = '已完成' THEN 1 ELSE 0 END) / COUNT(t.`任务ID`) * 100, 2) AS `完成率(%)`
+FROM `User` u
+LEFT JOIN `Goal` g  ON u.`用户ID` = g.`用户ID`
+LEFT JOIN `Plan` p  ON g.`目标ID` = p.`目标ID`
+LEFT JOIN `Task` t  ON p.`计划ID` = t.`计划ID`
+GROUP BY u.`用户ID`, u.`昵称`;
