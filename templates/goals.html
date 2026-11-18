@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}目标管理{% endblock %}
+{% block content %}
+    <section class="panel">
+        <h2>新建考研目标</h2>
+        <form id="goalForm" class="form-row">
+            <input type="text" id="goalSchool" placeholder="目标院校" required>
+            <input type="text" id="goalMajor" placeholder="目标专业" required>
+            <input type="number" id="goalScore" placeholder="目标分数" required>
+            <select id="goalStage">
+                <option value="基础">基础</option>
+                <option value="强化">强化</option>
+                <option value="冲刺">冲刺</option>
+            </select>
+            <input type="date" id="goalStart" required>
+            <input type="date" id="goalEnd" required>
+            <button type="submit" class="btn btn-primary">添加目标</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>我的目标</h2>
+        <table class="table">
+            <thead><tr><th>ID</th><th>目标院校</th><th>目标专业</th><th>目标分数</th><th>备考阶段</th><th>开始日期</th><th>结束日期</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="goalTable"></tbody>
+        </table>
+    </section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadGoals() {
+    const data = await api("/api/goals");
+    const tb = document.getElementById("goalTable");
+    tb.innerHTML = (data.data || []).map(x => `
+        <tr>
+            <td>${x["目标ID"]}</td><td>${x["目标院校"]}</td><td>${x["目标专业"]}</td>
+            <td>${x["目标分数"]}</td><td>${x["备考阶段"]}</td>
+            <td>${x["开始日期"]}</td><td>${x["结束日期"]}</td><td>${x["状态"]}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="delGoal(${x["目标ID"]})">删除</button></td>
+        </tr>`).join("") || '<tr><td colspan="9" class="empty">暂无目标</td></tr>';
+}
+async function delGoal(id) {
+    if (!confirm("确认删除该目标？其下属计划/任务将被级联删除")) return;
+    const data = await api("/api/goals/" + id, "DELETE");
+    if (data.code === 0) loadGoals(); else alert(data.msg);
+}
+document.addEventListener("DOMContentLoaded", () => {
+    loadGoals();
+    document.getElementById("goalForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = await api("/api/goals", "POST", {
+            school: document.getElementById("goalSchool").value,
+            major: document.getElementById("goalMajor").value,
+            score: document.getElementById("goalScore").value,
+            stage: document.getElementById("goalStage").value,
+            start: document.getElementById("goalStart").value,
+            end: document.getElementById("goalEnd").value
+        });
+        if (data.code === 0) { e.target.reset(); loadGoals(); } else alert(data.msg);
+    });
+});
+</script>
+{% endblock %}

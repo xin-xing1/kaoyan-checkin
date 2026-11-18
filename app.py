@@ -133,6 +133,32 @@ def logout():
 # ---------- 目标管理 ----------
 
 
+# ---------- /api/goals [GET,POST] ----------
+@app.route("/api/goals", methods=["GET", "POST"])
+def goals():
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == "GET":
+        cur.execute("SELECT * FROM `Goal` WHERE `用户ID`=%s", (session["uid"],))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"code": 0, "data": rows})
+    data = request.json
+    cur.execute(
+        "INSERT INTO `Goal`(`用户ID`,`目标院校`,`目标专业`,`目标分数`,`备考阶段`,`开始日期`,`结束日期`) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+        (session["uid"], data["school"], data["major"], data["score"],
+         data["stage"], data["start"], data["end"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "目标已创建"})
+
+
+# ---------- 任务管理 ----------
+
+
 # ---------- /api/stats ----------
 @app.route("/api/stats")
 def stats():
@@ -156,3 +182,19 @@ def stats():
 
 
 # ---------- 阶段计划管理 ----------
+
+
+# ---------- /api/goals/<int:goal_id> [DELETE] ----------
+@app.route("/api/goals/<int:goal_id>", methods=["DELETE"])
+def delete_goal(goal_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM `Goal` WHERE `目标ID`=%s AND `用户ID`=%s",
+                (goal_id, session["uid"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "目标已删除"})
+
+
+# ---------- 任务状态更新 ----------
