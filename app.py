@@ -188,6 +188,26 @@ def tasks():
 # ---------- 每日打卡（调用存储过程：打卡+积分+状态更新） ----------
 
 
+# ---------- /api/checkin [POST] ----------
+@app.route("/api/checkin", methods=["POST"])
+def checkin():
+    data = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.callproc("sp_checkin_and_award",
+                 (session["uid"], data["task_id"], data["complete_time"],
+                  data.get("image_url", ""), 0))
+    cur.execute("SELECT @_sp_checkin_and_award_4 AS cid")
+    cid = cur.fetchone()["cid"]
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "打卡成功，积分已发放", "checkin_id": cid})
+
+
+# ---------- 研友监督 ----------
+
+
 # ---------- /api/stats ----------
 @app.route("/api/stats")
 def stats():
