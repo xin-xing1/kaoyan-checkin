@@ -184,6 +184,49 @@ def stats():
 # ---------- 阶段计划管理 ----------
 
 
+# ---------- /api/plans [GET,POST] ----------
+@app.route("/api/plans", methods=["GET", "POST"])
+def plans():
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == "GET":
+        cur.execute(
+            "SELECT p.*, g.`目标院校`, g.`目标专业` FROM `Plan` p "
+            "JOIN `Goal` g ON p.`目标ID`=g.`目标ID` WHERE g.`用户ID`=%s "
+            "ORDER BY p.`开始日期`", (session["uid"],))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"code": 0, "data": rows})
+    data = request.json
+    cur.execute(
+        "INSERT INTO `Plan`(`目标ID`,`阶段`,`计划名称`,`开始日期`,`结束日期`) "
+        "VALUES (%s,%s,%s,%s,%s)",
+        (data["goal_id"], data["stage"], data["name"],
+         data["start"], data["end"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "计划已创建"})
+
+
+# ---------- /api/plans/<int:plan_id> [DELETE] ----------
+@app.route("/api/plans/<int:plan_id>", methods=["DELETE"])
+def delete_plan(plan_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE p FROM `Plan` p JOIN `Goal` g ON p.`目标ID`=g.`目标ID` "
+        "WHERE p.`计划ID`=%s AND g.`用户ID`=%s", (plan_id, session["uid"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "计划已删除"})
+
+
+# ---------- 目标删除 ----------
+
+
 # ---------- /api/goals/<int:goal_id> [DELETE] ----------
 @app.route("/api/goals/<int:goal_id>", methods=["DELETE"])
 def delete_goal(goal_id):
