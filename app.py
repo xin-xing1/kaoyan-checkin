@@ -159,6 +159,35 @@ def goals():
 # ---------- 任务管理 ----------
 
 
+# ---------- /api/tasks [GET,POST] ----------
+@app.route("/api/tasks", methods=["GET", "POST"])
+def tasks():
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == "GET":
+        cur.execute(
+            "SELECT t.* FROM `Task` t JOIN `Plan` p ON t.`计划ID`=p.`计划ID` "
+            "JOIN `Goal` g ON p.`目标ID`=g.`目标ID` WHERE g.`用户ID`=%s ORDER BY t.`截止时间`",
+            (session["uid"],))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"code": 0, "data": rows})
+    data = request.json
+    cur.execute(
+        "INSERT INTO `Task`(`计划ID`,`任务名称`,`科目`,`预计时长`,`优先级`,`截止时间`) "
+        "VALUES (%s,%s,%s,%s,%s,%s)",
+        (data["plan_id"], data["name"], data["subject"],
+         data["duration"], data["priority"], data["deadline"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "任务已创建"})
+
+
+# ---------- 每日打卡（调用存储过程：打卡+积分+状态更新） ----------
+
+
 # ---------- /api/stats ----------
 @app.route("/api/stats")
 def stats():
@@ -241,3 +270,23 @@ def delete_goal(goal_id):
 
 
 # ---------- 任务状态更新 ----------
+
+
+# ---------- /api/tasks/<int:task_id> [PUT] ----------
+@app.route("/api/tasks/<int:task_id>", methods=["PUT"])
+def update_task(task_id):
+    data = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE `Task` t JOIN `Plan` p ON t.`计划ID`=p.`计划ID` "
+        "JOIN `Goal` g ON p.`目标ID`=g.`目标ID` "
+        "SET t.`完成状态`=%s WHERE t.`任务ID`=%s AND g.`用户ID`=%s",
+        (data["status"], task_id, session["uid"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "msg": "任务状态已更新"})
+
+
+# ---------- 打卡记录查询 ----------
