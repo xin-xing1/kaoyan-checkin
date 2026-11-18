@@ -16,10 +16,6 @@ def get_db():
         charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor
     )
 
-
-# ---------- 页面路由 ----------
-
-
 # ---------- / ----------
 @app.route("/")
 def index():
@@ -27,12 +23,10 @@ def index():
         return redirect(url_for("login"))
     return render_template("index.html", nickname=session.get("nickname"))
 
-
 # ---------- /login ----------
 @app.route("/login")
 def login():
     return render_template("login.html")
-
 
 # ---------- /goals ----------
 @app.route("/goals")
@@ -41,14 +35,12 @@ def goals_page():
         return redirect(url_for("login"))
     return render_template("goals.html", nickname=session.get("nickname"))
 
-
 # ---------- /plans ----------
 @app.route("/plans")
 def plans_page():
     if "uid" not in session:
         return redirect(url_for("login"))
     return render_template("plans.html", nickname=session.get("nickname"))
-
 
 # ---------- /tasks ----------
 @app.route("/tasks")
@@ -57,14 +49,12 @@ def tasks_page():
         return redirect(url_for("login"))
     return render_template("tasks.html", nickname=session.get("nickname"))
 
-
 # ---------- /checkin ----------
 @app.route("/checkin")
 def checkin_page():
     if "uid" not in session:
         return redirect(url_for("login"))
     return render_template("checkin.html", nickname=session.get("nickname"))
-
 
 # ---------- /supervise ----------
 @app.route("/supervise")
@@ -73,17 +63,12 @@ def supervise_page():
         return redirect(url_for("login"))
     return render_template("supervise.html", nickname=session.get("nickname"))
 
-
 # ---------- /rewards ----------
 @app.route("/rewards")
 def rewards_page():
     if "uid" not in session:
         return redirect(url_for("login"))
     return render_template("rewards.html", nickname=session.get("nickname"))
-
-
-# ---------- 用户注册与登录 ----------
-
 
 # ---------- /api/register [POST] ----------
 @app.route("/api/register", methods=["POST"])
@@ -105,7 +90,6 @@ def register():
         cur.close()
         conn.close()
 
-
 # ---------- /api/login [POST] ----------
 @app.route("/api/login", methods=["POST"])
 def login_api():
@@ -122,16 +106,11 @@ def login_api():
         return jsonify({"code": 0, "msg": "登录成功", "nickname": user["昵称"]})
     return jsonify({"code": 1, "msg": "手机号或密码错误"})
 
-
 # ---------- /api/logout ----------
 @app.route("/api/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
-
-
-# ---------- 目标管理 ----------
-
 
 # ---------- /api/goals [GET,POST] ----------
 @app.route("/api/goals", methods=["GET", "POST"])
@@ -154,10 +133,6 @@ def goals():
     cur.close()
     conn.close()
     return jsonify({"code": 0, "msg": "目标已创建"})
-
-
-# ---------- 任务管理 ----------
-
 
 # ---------- /api/tasks [GET,POST] ----------
 @app.route("/api/tasks", methods=["GET", "POST"])
@@ -184,10 +159,6 @@ def tasks():
     conn.close()
     return jsonify({"code": 0, "msg": "任务已创建"})
 
-
-# ---------- 每日打卡（调用存储过程：打卡+积分+状态更新） ----------
-
-
 # ---------- /api/checkin [POST] ----------
 @app.route("/api/checkin", methods=["POST"])
 def checkin():
@@ -203,10 +174,6 @@ def checkin():
     cur.close()
     conn.close()
     return jsonify({"code": 0, "msg": "打卡成功，积分已发放", "checkin_id": cid})
-
-
-# ---------- 研友监督 ----------
-
 
 # ---------- /api/stats ----------
 @app.route("/api/stats")
@@ -228,10 +195,6 @@ def stats():
     conn.close()
     return jsonify({"code": 0, "checkin": checkin_stats, "rank": rank,
                     "task": task_stats, "top10": top10})
-
-
-# ---------- 阶段计划管理 ----------
-
 
 # ---------- /api/plans [GET,POST] ----------
 @app.route("/api/plans", methods=["GET", "POST"])
@@ -258,7 +221,6 @@ def plans():
     conn.close()
     return jsonify({"code": 0, "msg": "计划已创建"})
 
-
 # ---------- /api/plans/<int:plan_id> [DELETE] ----------
 @app.route("/api/plans/<int:plan_id>", methods=["DELETE"])
 def delete_plan(plan_id):
@@ -272,10 +234,6 @@ def delete_plan(plan_id):
     conn.close()
     return jsonify({"code": 0, "msg": "计划已删除"})
 
-
-# ---------- 目标删除 ----------
-
-
 # ---------- /api/goals/<int:goal_id> [DELETE] ----------
 @app.route("/api/goals/<int:goal_id>", methods=["DELETE"])
 def delete_goal(goal_id):
@@ -287,10 +245,6 @@ def delete_goal(goal_id):
     cur.close()
     conn.close()
     return jsonify({"code": 0, "msg": "目标已删除"})
-
-
-# ---------- 任务状态更新 ----------
-
 
 # ---------- /api/tasks/<int:task_id> [PUT] ----------
 @app.route("/api/tasks/<int:task_id>", methods=["PUT"])
@@ -308,5 +262,20 @@ def update_task(task_id):
     conn.close()
     return jsonify({"code": 0, "msg": "任务状态已更新"})
 
-
 # ---------- 打卡记录查询 ----------
+@app.route("/api/checkin")
+def checkin_history():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT c.*, t.`任务名称`, t.`科目` FROM `Checkin` c JOIN `Task` t ON c.`任务ID`=t.`任务ID` WHERE c.`用户ID`=%s ORDER BY c.`打卡时间戳` DESC LIMIT 50",
+        (session["uid"],),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify({"code": 0, "data": rows})
+
+# ---------- STARTUP ----------
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)

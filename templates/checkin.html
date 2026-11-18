@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}每日打卡{% endblock %}
+{% block content %}
+    <section class="panel">
+        <h2>待打卡任务</h2>
+        <table class="table">
+            <thead><tr><th>ID</th><th>任务名称</th><th>科目</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="todoTable"></tbody>
+        </table>
+        <p class="muted">点击「打卡」将调用存储过程 sp_checkin_and_award：写入打卡记录、发放 +10 积分并更新任务状态为已完成。</p>
+    </section>
+
+    <section class="panel">
+        <h2>打卡历史</h2>
+        <table class="table">
+            <thead><tr><th>打卡ID</th><th>任务名称</th><th>科目</th><th>完成时间</th><th>打卡时间戳</th><th>图片证明</th></tr></thead>
+            <tbody id="historyTable"></tbody>
+        </table>
+    </section>
+{% endblock %}
+{% block scripts %}
+<script>
+const STS2 = { "已完成": "tag-done", "进行中": "tag-doing", "待执行": "tag-wait", "已逾期": "tag-over" };
+function nowStr() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+async function loadTodo() {
+    const data = await api("/api/tasks");
+    const tb = document.getElementById("todoTable");
+    const list = (data.data || []).filter(t => t["完成状态"] !== "已完成");
+    tb.innerHTML = list.map(x => `
+        <tr>
+            <td>${x["任务ID"]}</td><td>${x["任务名称"]}</td><td>${x["科目"]}</td>
+            <td>${x["截止时间"]}</td>
+            <td><span class="tag ${STS2[x["完成状态"]] || ''}">${x["完成状态"]}</span></td>
+            <td><button class="btn btn-success btn-sm" onclick="doCheckin(${x["任务ID"]})">打卡</button></td>
+        </tr>`).join("") || '<tr><td colspan="6" class="empty">太棒了，暂无待打卡任务</td></tr>';
+}
+async function doCheckin(taskId) {
+    const input = prompt("请输入完成时间（格式 2026-10-20 20:30:00，留空使用当前时间）");
+    const data = await api("/api/checkin", "POST", {
+        task_id: taskId,
+        complete_time: (input && input.trim()) || nowStr()
+    });
+    alert(data.msg);
+    if (data.code === 0) { loadTodo(); loadHistory(); }
+}
+async function loadHistory() {
+    const data = await api("/api/checkin");
+    const tb = document.getElementById("historyTable");
+    tb.innerHTML = (data.data || []).map(x => `
+        <tr>
+            <td>${x["打卡ID"]}</td><td>${x["任务名称"]}</td><td>${x["科目"]}</td>
+            <td>${x["完成时间"]}</td><td>${x["打卡时间戳"]}</td>
+            <td>${x["图片证明URL"] ? "有" : "-"}</td>
+        </tr>`).join("") || '<tr><td colspan="6" class="empty">暂无打卡记录</td></tr>';
+}
+document.addEventListener("DOMContentLoaded", () => { loadTodo(); loadHistory(); });
+</script>
+{% endblock %}
