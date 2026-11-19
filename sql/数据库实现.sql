@@ -318,3 +318,32 @@ DELIMITER ;
 -- SELECT * FROM v_user_checkin_stats;
 -- SELECT * FROM v_points_rank;
 -- SELECT * FROM v_task_completion_stats;
+
+-- ============================================================================
+-- ⑦ 触发器（满足实验要求"触发器 ≥1 次"；同时修复删除目标时的外键 1451 报错）
+-- 说明：MySQL 触发器中不可引用触发语句自身的表（Goal），因此仅清理三张子表，
+--       Goal 自身仍由 DELETE 语句删除；删除顺序必须自底向上 Checkin -> Task -> Plan。
+-- ============================================================================
+
+-- 7.1 目标删除级联清理：删除某目标前，先清理其下所有打卡记录、任务与阶段计划
+DROP TRIGGER IF EXISTS `trg_goal_before_delete`;
+DELIMITER $$
+CREATE TRIGGER `trg_goal_before_delete`
+BEFORE DELETE ON `Goal`
+FOR EACH ROW
+BEGIN
+    -- ① 删除该目标下所有任务对应的打卡记录（Checkin 依赖 Task）
+    DELETE c FROM `Checkin` c
+      JOIN `Task` t ON c.`任务ID` = t.`任务ID`
+      JOIN `Plan` p ON t.`计划ID` = p.`计划ID`
+     WHERE p.`目标ID` = OLD.`目标ID`;
+
+    -- ② 删除该目标下所有阶段计划中的任务（Task 依赖 Plan）
+    DELETE t FROM `Task` t
+      JOIN `Plan` p ON t.`计划ID` = p.`计划ID`
+     WHERE p.`目标ID` = OLD.`目标ID`;
+
+    -- ③ 删除该目标下的全部阶段计划（Plan 依赖 Goal，Goal 自身由调用语句删除）
+    DELETE FROM `Plan` WHERE `目标ID` = OLD.`目标ID`;
+END$$
+DELIMITER ;

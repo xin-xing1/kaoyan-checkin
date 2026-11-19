@@ -140,10 +140,20 @@ def tasks():
     conn = get_db()
     cur = conn.cursor()
     if request.method == "GET":
-        cur.execute(
-            "SELECT t.* FROM `Task` t JOIN `Plan` p ON t.`计划ID`=p.`计划ID` "
-            "JOIN `Goal` g ON p.`目标ID`=g.`目标ID` WHERE g.`用户ID`=%s ORDER BY t.`截止时间`",
-            (session["uid"],))
+        # 查询条件：keyword 关键词（任务名称/科目模糊匹配）、status 完成状态精确匹配
+        keyword = (request.args.get("keyword") or "").strip()
+        status = (request.args.get("status") or "").strip()
+        sql = ("SELECT t.* FROM `Task` t JOIN `Plan` p ON t.`计划ID`=p.`计划ID` "
+               "JOIN `Goal` g ON p.`目标ID`=g.`目标ID` WHERE g.`用户ID`=%s")
+        params = [session["uid"]]
+        if keyword:
+            sql += " AND (t.`任务名称` LIKE %s OR t.`科目` LIKE %s)"
+            params.extend(["%" + keyword + "%", "%" + keyword + "%"])
+        if status:
+            sql += " AND t.`完成状态`=%s"
+            params.append(status)
+        sql += " ORDER BY t.`截止时间`"
+        cur.execute(sql, tuple(params))
         rows = cur.fetchall()
         cur.close()
         conn.close()

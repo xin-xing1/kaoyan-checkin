@@ -20,6 +20,18 @@
 
     <section class="panel">
         <h2>我的任务</h2>
+        <form id="taskFilter" class="form-row">
+            <input type="text" id="filterKeyword" placeholder="关键词：任务名称/科目">
+            <select id="filterStatus">
+                <option value="">全部状态</option>
+                <option value="待执行">待执行</option>
+                <option value="进行中">进行中</option>
+                <option value="已完成">已完成</option>
+                <option value="已逾期">已逾期</option>
+            </select>
+            <button type="submit" class="btn btn-primary">查询</button>
+            <button type="button" class="btn btn-primary" id="filterReset">重置</button>
+        </form>
         <table class="table">
             <thead><tr><th>ID</th><th>任务名称</th><th>科目</th><th>预计时长</th><th>优先级</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead>
             <tbody id="taskTable"></tbody>
@@ -30,8 +42,17 @@
 <script>
 const PRI = { "高": "tag-high", "中": "tag-mid", "低": "tag-low" };
 const STS = { "已完成": "tag-done", "进行中": "tag-doing", "待执行": "tag-wait", "已逾期": "tag-over" };
+function taskQuery() {
+    const kw = document.getElementById("filterKeyword").value.trim();
+    const st = document.getElementById("filterStatus").value;
+    const q = new URLSearchParams();
+    if (kw) q.append("keyword", kw);
+    if (st) q.append("status", st);
+    const s = q.toString();
+    return s ? ("/api/tasks?" + s) : "/api/tasks";
+}
 async function loadTasks() {
-    const data = await api("/api/tasks");
+    const data = await api(taskQuery());
     const tb = document.getElementById("taskTable");
     tb.innerHTML = (data.data || []).map(x => `
         <tr>
@@ -52,6 +73,15 @@ async function setStatus(id, status) {
 }
 document.addEventListener("DOMContentLoaded", async () => {
     loadTasks();
+    document.getElementById("taskFilter").addEventListener("submit", (e) => {
+        e.preventDefault();
+        loadTasks();
+    });
+    document.getElementById("filterReset").addEventListener("click", () => {
+        document.getElementById("filterKeyword").value = "";
+        document.getElementById("filterStatus").value = "";
+        loadTasks();
+    });
     const p = await api("/api/plans");
     const sel = document.getElementById("taskPlan");
     sel.innerHTML = '<option value="">选择计划</option>' + (p.data || []).map(x =>
