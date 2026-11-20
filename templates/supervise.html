@@ -7,14 +7,33 @@
             <input type="text" id="peerPhone" placeholder="研友手机号" required>
             <button type="submit" class="btn btn-primary">建立监督</button>
         </form>
-        <p class="muted">提示：监督关系建立后，双方每日打卡进度互相可见；每人最多 10 个监督关系（状态：有效 / 已解除）。</p>
+        <p class="muted">提示：监督关系建立后，双方互为研友（双向生效），可在下方查看对方今日是否已打卡、近 7 天打卡天数与逾期任务；每人最多 10 个监督关系（状态：有效 / 已解除）。</p>
     </section>
 
     <section class="panel">
         <h2>我监督的研友</h2>
         <table class="table">
-            <thead><tr><th>监督ID</th><th>研友昵称</th><th>操作</th></tr></thead>
+            <thead><tr><th>监督ID</th><th>研友昵称</th><th>今日打卡</th><th>近7天打卡天数</th><th>操作</th></tr></thead>
             <tbody id="peerTable"></tbody>
+        </table>
+    </section>
+
+    <section class="panel" id="detailPanel" style="display:none;">
+        <h2>研友详情：<span id="detailName">-</span></h2>
+        <p class="muted" id="detailSummary"></p>
+        <h3>逾期任务清单</h3>
+        <table class="table">
+            <thead><tr><th>任务名称</th><th>科目</th><th>截止时间</th></tr></thead>
+            <tbody id="detailTasks"></tbody>
+        </table>
+        <p><button type="button" class="btn btn-sm" onclick="hideDetail()">收起</button></p>
+    </section>
+
+    <section class="panel">
+        <h2>研友组内排行</h2>
+        <table class="table">
+            <thead><tr><th>排名</th><th>昵称</th><th>总积分</th></tr></thead>
+            <tbody id="rankTable"></tbody>
         </table>
     </section>
 {% endblock %}
@@ -23,26 +42,75 @@
 async function loadPeers() {
     const data = await api("/api/supervise");
     const tb = document.getElementById("peerTable");
-    tb.innerHTML = (data.data || []).map(x => `
+    const peers = data.data || [];
+    if (!peers.length) {
+        tb.innerHTML = '<tr><td colspan="5" class="empty">暂无监督研友</td></tr>';
+        return;
+    }
+    const statusList = await Promise.all(peers.map(p => api("/api/supervise/" + p["监督ID"] + "/status")));
+    tb.innerHTML = peers.map((x, i) => {
+        const s = statusList[i] || {};
+        const ok = s.code === 0;
+        const today = ok ? (s.checkin["今日已打卡"] ? "已打卡" : "未打卡") : "-";
+        const week = ok ? s.checkin["近7天打卡天数"] : "-";
+        return `
         <tr>
             <td>${x["监督ID"] || '-'}</td>
             <td>👥 ${x["昵称"]}</td>
-            <td><button class="btn btn-danger btn-sm" onclick="removeSup(${x["监督ID"]})">解除</button></td>
-        </tr>`).join("") || '<tr><td colspan="3" class="empty">暂无监督研友</td></tr>';
+            <td>${today}</td>
+            <td>${week}</td>
+            <td>
+                <button class="btn btn-primary btn-sm" onclick="showDetail(${x["监督ID"]})">查看详情</button>
+                <button class="btn btn-danger btn-sm" onclick="removeSup(${x["监督ID"]})">解除</button>
+            </td>
+        </tr>`;
+    }).join("");
+}
+function hideDetail() {
+    document.getElementById("detailPanel").style.display = "none";
+}
+async function showDetail(id) {
+    const s = await api("/api/supervise/" + id + "/status");
+    if (s.code !== 0) { alert(s.msg); return; }
+    document.getElementById("detailName").textContent = s.peer["昵称"] || "-";
+    document.getElementById("detailSummary").textContent =
+        "今日" + (s.checkin["今日已打卡"] ? "已打卡" : "未打卡") +
+        "；近7天打卡 " + s.checkin["近7天打卡天数"] + " 天。";
+    const tb = document.getElementById("detailTasks");
+    const list = s.overdue_tasks || [];
+    tb.innerHTML = list.length ? list.map(t => `
+        <tr>
+            <td>${t["任务名称"]}</td>
+            <td>${t["科目"] || '-'}</td>
+            <td>${t["截止时间"] || '-'}</td>
+        </tr>`).join("") : '<tr><td colspan="3" class="empty">暂无逾期任务</td></tr>';
+    document.getElementById("detailPanel").style.display = "";
+}
+async function loadRank() {
+    const data = await api("/api/supervise/rank");
+    const tb = document.getElementById("rankTable");
+    const rows = data.data || [];
+    tb.innerHTML = rows.length ? rows.map((r, i) => `
+        <tr${r.is_self ? ' style="font-weight:bold;"' : ''}>
+            <td>${i + 1}</td>
+            <td>${r["昵称"]}${r.is_self ? '（我）' : ''}</td>
+            <td>${r["总积分"]}</td>
+        </tr>`).join("") : '<tr><td colspan="3" class="empty">暂无排行数据</td></tr>';
 }
 async function removeSup(id) {
     if (!confirm("确认解除该监督关系？")) return;
     const data = await api("/api/supervise/" + id, "DELETE");
-    if (data.code === 0) loadPeers(); else alert(data.msg);
+    if (data.code === 0) { hideDetail(); loadPeers(); loadRank(); } else alert(data.msg);
 }
 document.addEventListener("DOMContentLoaded", () => {
     loadPeers();
+    loadRank();
     document.getElementById("superviseForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const data = await api("/api/supervise", "POST", {
             phone: document.getElementById("peerPhone").value
         });
-        if (data.code === 0) { e.target.reset(); loadPeers(); } else alert(data.msg);
+        if (data.code === 0) { e.target.reset(); loadPeers(); loadRank(); } else alert(data.msg);
     });
 });
 </script>

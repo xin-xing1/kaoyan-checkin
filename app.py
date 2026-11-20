@@ -201,22 +201,47 @@ def supervise():
         conn.close()
         return jsonify({"code": 0, "data": rows})
 
-    data = request.json
-    cur.execute("SELECT `用户ID` FROM `User` WHERE `手机号`=%s", (data["phone"],))
+    data = request.json or {}
+    phone = (data.get("phone") or "").strip()
+    if not phone:
+        cur.close()
+        conn.close()
+        return jsonify({"code": 1, "msg": "请输入研友手机号"})
+
+    cur.execute("SELECT `用户ID` FROM `User` WHERE `手机号`=%s", (phone,))
     peer = cur.fetchone()
     if not peer:
         cur.close()
         conn.close()
         return jsonify({"code": 1, "msg": "未找到该手机号用户"})
 
-    cur.execute(
-        "INSERT INTO `Supervise`(`用户ID`,`研友ID`,`状态`) VALUES (%s,%s,'有效')",
-        (session["uid"], peer["用户ID"]),
-    )
+    uid = session["uid"]
+    peer_id = peer["用户ID"]
+    if peer_id == uid:
+        cur.close()
+        conn.close()
+        return jsonify({"code": 1, "msg": "不能添加自己为研友，请填写对方的手机号"})
+
+    # 双向建立：正反各一条，写入前按方向查重，同一次连接内 commit
+    inserted = 0
+    for owner, friend in ((uid, peer_id), (peer_id, uid)):
+        cur.execute(
+            "SELECT `监督ID` FROM `Supervise` WHERE `用户ID`=%s AND `研友ID`=%s AND `状态`='有效'",
+            (owner, friend),
+        )
+        if cur.fetchone():
+            continue
+        cur.execute(
+            "INSERT INTO `Supervise`(`用户ID`,`研友ID`,`状态`) VALUES (%s,%s,'有效')",
+            (owner, friend),
+        )
+        inserted += 1
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"code": 0, "msg": "监督关系已建立"})
+    if inserted == 0:
+        return jsonify({"code": 0, "msg": "你们已是研友，无需重复添加"})
+    return jsonify({"code": 0, "msg": "监督关系已建立（双向生效）"})
 
 # ---------- /api/stats ----------
 @app.route("/api/stats")
@@ -350,16 +375,111 @@ def points():
 # ---------- /api/supervise/<int:sup_id> [DELETE] ----------
 @app.route("/api/supervise/<int:sup_id>", methods=["DELETE"])
 def delete_supervise(sup_id):
+    uid = session["uid"]
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "UPDATE `Supervise` SET `状态`='已解除' WHERE `监督ID`=%s AND `用户ID`=%s",
-        (sup_id, session["uid"]),
+        "SELECT `研友ID` FROM `Supervise` WHERE `监督ID`=%s AND `用户ID`=%s",
+        (sup_id, uid),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({"code": 1, "msg": "监督关系不存在或不属于当前用户"})
+    peer_id = row["研友ID"]
+    # 双向解除：本人→研友、研友→本人 两条有效记录一并置为已解除
+    cur.execute(
+        "UPDATE `Supervise` SET `状态`='已解除' "
+        "WHERE ((`用户ID`=%s AND `研友ID`=%s) OR (`用户ID`=%s AND `研友ID`=%s)) "
+        "AND `状态`='有效'",
+        (uid, peer_id, peer_id, uid),
     )
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"code": 0, "msg": "监督关系已解除"})
+    return jsonify({"code": 0, "msg": "监督关系已解除（双向生效）"})
+
+# ---------- /api/supervise/rank ----------
+@app.route("/api/supervise/rank")
+def supervise_rank():
+    """研友组内排行：本人 + 所有状态为“有效”的研友，复用 v_points_rank 视图"""
+    uid = session["uid"]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT `研友ID` FROM `Supervise` WHERE `用户ID`=%s AND `状态`='有效'",
+        (uid,),
+    )
+    ids = [uid]
+    for r in cur.fetchall():
+        if r["研友ID"] not in ids:
+            ids.append(r["研友ID"])
+    placeholders = ",".join(["%s"] * len(ids))
+    cur.execute(
+        "SELECT `用户ID`, `昵称`, `总积分` FROM `v_points_rank` "
+        "WHERE `用户ID` IN (" + placeholders + ") ORDER BY `总积分` DESC",
+        tuple(ids),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    data = [{"用户ID": r["用户ID"], "昵称": r["昵称"], "总积分": r["总积分"],
+             "is_self": r["用户ID"] == uid} for r in rows]
+    return jsonify({"code": 0, "data": data})
+
+# ---------- /api/supervise/<int:sup_id>/status ----------
+@app.route("/api/supervise/<int:sup_id>/status")
+def supervise_status(sup_id):
+    """研友状态：基本信息 + 今日/近7天打卡 + 逾期任务，只读"""
+    uid = session["uid"]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT `研友ID` FROM `Supervise` WHERE `监督ID`=%s AND `用户ID`=%s AND `状态`='有效'",
+        (sup_id, uid),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({"code": 1, "msg": "监督关系不存在、已解除或不属于当前用户"})
+    peer_id = row["研友ID"]
+
+    cur.execute("SELECT `用户ID`, `昵称` FROM `User` WHERE `用户ID`=%s", (peer_id,))
+    peer = cur.fetchone() or {}
+
+    cur.execute(
+        "SELECT COUNT(*) AS c FROM `Checkin` "
+        "WHERE `用户ID`=%s AND DATE(`打卡时间戳`)=CURDATE()",
+        (peer_id,),
+    )
+    today_count = cur.fetchone()["c"] or 0
+
+    cur.execute(
+        "SELECT COUNT(DISTINCT DATE(`打卡时间戳`)) AS c FROM `Checkin` "
+        "WHERE `用户ID`=%s AND `打卡时间戳`>=DATE_SUB(NOW(), INTERVAL 7 DAY)",
+        (peer_id,),
+    )
+    week_days = cur.fetchone()["c"] or 0
+
+    cur.execute(
+        "SELECT t.`任务名称`, t.`科目`, t.`截止时间` FROM `Task` t "
+        "JOIN `Plan` p ON t.`计划ID`=p.`计划ID` "
+        "JOIN `Goal` g ON p.`目标ID`=g.`目标ID` "
+        "JOIN `User` u ON g.`用户ID`=u.`用户ID` "
+        "WHERE u.`用户ID`=%s AND t.`完成状态`='已逾期' ORDER BY t.`截止时间` ASC",
+        (peer_id,),
+    )
+    overdue = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify({
+        "code": 0,
+        "peer": {"用户ID": peer.get("用户ID"), "昵称": peer.get("昵称")},
+        "checkin": {"今日已打卡": bool(today_count), "近7天打卡天数": int(week_days)},
+        "overdue_tasks": overdue,
+    })
 
 # ---------- STARTUP ----------
 if __name__ == "__main__":
